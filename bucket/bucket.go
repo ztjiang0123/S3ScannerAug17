@@ -214,40 +214,45 @@ func (b *Bucket) grant(groupURI string, p types.Permission) {
 	}
 }
 
+// permOffsets maps each S3 ACL permission to its slot within a group's ordered
+// field set (see permField). Declared once so the lookup is not rebuilt per call.
+var permOffsets = map[types.Permission]int{
+	types.PermissionRead:        0,
+	types.PermissionWrite:       1,
+	types.PermissionReadAcp:     2,
+	types.PermissionWriteAcp:    3,
+	types.PermissionFullControl: 4,
+}
+
 // permField returns a pointer to the permission field for the given group and
 // permission, or nil if the group or permission is not recognized. The group
-// selects which set of fields to read; the permission selects the offset within
-// that set, so both groups share one lookup table.
+// selects which ordered set of fields to read; the permission selects the offset
+// within that set, so both groups share one lookup path.
 func (b *Bucket) permField(groupURI string, p types.Permission) *uint8 {
-	fields, ok := map[string][5]*uint8{
-		groups.AllUsersGroup: {
+	offset, ok := permOffsets[p]
+	if !ok {
+		return nil
+	}
+
+	var fields [5]*uint8
+	switch groupURI {
+	case groups.AllUsersGroup:
+		fields = [5]*uint8{
 			&b.PermAllUsersRead,
 			&b.PermAllUsersWrite,
 			&b.PermAllUsersReadACL,
 			&b.PermAllUsersWriteACL,
 			&b.PermAllUsersFullControl,
-		},
-		groups.AuthUsersGroup: {
+		}
+	case groups.AuthUsersGroup:
+		fields = [5]*uint8{
 			&b.PermAuthUsersRead,
 			&b.PermAuthUsersWrite,
 			&b.PermAuthUsersReadACL,
 			&b.PermAuthUsersWriteACL,
 			&b.PermAuthUsersFullControl,
-		},
-	}[groupURI]
-	if !ok {
-		return nil
-	}
-
-	offsets := map[types.Permission]int{
-		types.PermissionRead:        0,
-		types.PermissionWrite:       1,
-		types.PermissionReadAcp:     2,
-		types.PermissionWriteAcp:    3,
-		types.PermissionFullControl: 4,
-	}
-	offset, ok := offsets[p]
-	if !ok {
+		}
+	default:
 		return nil
 	}
 	return fields[offset]
