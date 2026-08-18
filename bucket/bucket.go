@@ -190,40 +190,72 @@ func (b *Bucket) ParseACLOutputV2(aclOutput *s3.GetBucketAclOutput) error {
 	b.DenyAll()
 
 	for _, g := range aclOutput.Grants {
-		if g.Grantee != nil && g.Grantee.Type == "Group" && *g.Grantee.URI == groups.AllUsersGroup {
-			switch g.Permission {
-			case types.PermissionRead:
-				b.PermAllUsersRead = PermissionAllowed
-			case types.PermissionWrite:
-				b.PermAllUsersWrite = PermissionAllowed
-			case types.PermissionReadAcp:
-				b.PermAllUsersReadACL = PermissionAllowed
-			case types.PermissionWriteAcp:
-				b.PermAllUsersWriteACL = PermissionAllowed
-			case types.PermissionFullControl:
-				b.PermAllUsersFullControl = PermissionAllowed
-			default:
-				break
-			}
-		}
-		if g.Grantee != nil && g.Grantee.Type == "Group" && *g.Grantee.URI == groups.AuthUsersGroup {
-			switch g.Permission {
-			case types.PermissionRead:
-				b.PermAuthUsersRead = PermissionAllowed
-			case types.PermissionWrite:
-				b.PermAuthUsersWrite = PermissionAllowed
-			case types.PermissionReadAcp:
-				b.PermAuthUsersReadACL = PermissionAllowed
-			case types.PermissionWriteAcp:
-				b.PermAuthUsersWriteACL = PermissionAllowed
-			case types.PermissionFullControl:
-				b.PermAuthUsersFullControl = PermissionAllowed
-			default:
-				break
-			}
-		}
+		b.grant(groupURI(g.Grantee), g.Permission)
 	}
 	return nil
+}
+
+// groupURI returns the group URI a grantee applies to, or "" if the grantee is
+// nil or not a group. This keeps the nil/type guards out of the parse loop.
+func groupURI(grantee *types.Grantee) string {
+	if grantee == nil || grantee.Type != "Group" || grantee.URI == nil {
+		return ""
+	}
+	return *grantee.URI
+}
+
+// grant marks the given permission as allowed for the group identified by
+// groupURI. Unknown groups and permissions are ignored. Resolving the target
+// field via permField keeps a single code path for both the AllUsers and
+// AuthenticatedUsers groups.
+func (b *Bucket) grant(groupURI string, p types.Permission) {
+	if field := b.permField(groupURI, p); field != nil {
+		*field = PermissionAllowed
+	}
+}
+
+// permOffsets maps each S3 ACL permission to its slot within a group's ordered
+// field set (see permField). Declared once so the lookup is not rebuilt per call.
+var permOffsets = map[types.Permission]int{
+	types.PermissionRead:        0,
+	types.PermissionWrite:       1,
+	types.PermissionReadAcp:     2,
+	types.PermissionWriteAcp:    3,
+	types.PermissionFullControl: 4,
+}
+
+// permField returns a pointer to the permission field for the given group and
+// permission, or nil if the group or permission is not recognized. The group
+// selects which ordered set of fields to read; the permission selects the offset
+// within that set, so both groups share one lookup path.
+func (b *Bucket) permField(groupURI string, p types.Permission) *uint8 {
+	offset, ok := permOffsets[p]
+	if !ok {
+		return nil
+	}
+
+	var fields [5]*uint8
+	switch groupURI {
+	case groups.AllUsersGroup:
+		fields = [5]*uint8{
+			&b.PermAllUsersRead,
+			&b.PermAllUsersWrite,
+			&b.PermAllUsersReadACL,
+			&b.PermAllUsersWriteACL,
+			&b.PermAllUsersFullControl,
+		}
+	case groups.AuthUsersGroup:
+		fields = [5]*uint8{
+			&b.PermAuthUsersRead,
+			&b.PermAuthUsersWrite,
+			&b.PermAuthUsersReadACL,
+			&b.PermAuthUsersWriteACL,
+			&b.PermAuthUsersFullControl,
+		}
+	default:
+		return nil
+	}
+	return fields[offset]
 }
 
 // Permission is a convenience method to convert a boolean into either a PermissionAllowed or PermissionDenied
