@@ -50,6 +50,12 @@ func TestMqWork(t *testing.T) {
 	assert.Nil(t, err)
 	publishBucket(ch, bucket.Bucket{Name: "mqtest"})
 
-	WorkMQ(0, &wg, conn, aws, "test", 1,
-		false, false)
+	WorkMQ(0, &wg, MQConfig{
+		Conn:        conn,
+		Provider:    aws,
+		Queue:       "test",
+		Threads:     1,
+		DoEnumerate: false,
+		WriteToDB:   false,
+	})
 }

@@ -19,14 +19,25 @@ func FailOnError(err error, msg string) {
 	}
 }
 
-func WorkMQ(threadID int, wg *sync.WaitGroup, conn *amqp.Connection, provider provider.StorageProvider, queue string,
-	threads int, doEnumerate bool, writeToDB bool) {
+// MQConfig groups the shared configuration used by every WorkMQ consumer.
+type MQConfig struct {
+	Conn        *amqp.Connection
+	Provider    provider.StorageProvider
+	Queue       string
+	Threads     int
+	DoEnumerate bool
+	WriteToDB   bool
+}
+
+func WorkMQ(threadID int, wg *sync.WaitGroup, cfg MQConfig) {
+	provider := cfg.Provider
+	queue := cfg.Queue
 	_, once := os.LookupEnv("TEST_MQ") // If we're being tested, exit after one bucket is scanned
 	defer wg.Done()
 
 	// Wrap the whole thing in a for (while) loop so if the mq server kills the channel, we start it up again
 	for {
-		ch, chErr := mq.Connect(conn, queue, threads, threadID)
+		ch, chErr := mq.Connect(cfg.Conn, queue, cfg.Threads, threadID)
 		if chErr != nil {
 			FailOnError(chErr, "couldn't connect to message queue")
 		}
@@ -70,11 +81,11 @@ func WorkMQ(threadID int, wg *sync.WaitGroup, conn *amqp.Connection, provider pr
 				continue
 			}
 
-			if doEnumerate {
+			if cfg.DoEnumerate {
 				if b.PermAllUsersRead != bucket.PermissionAllowed {
 					PrintResult(&bucketToScan, false)
 					FailOnError(j.Ack(false), "failed to ack")
-					if writeToDB {
+					if cfg.WriteToDB {
 						dbErr := db.StoreBucket(&bucketToScan)
 						if dbErr != nil {
 							log.Error(dbErr)
@@ -104,7 +115,7 @@ func WorkMQ(threadID int, wg *sync.WaitGroup, conn *amqp.Connection, provider pr
 			}
 
 			// Write to database
-			if writeToDB {
+			if cfg.WriteToDB {
 				dbErr := db.StoreBucket(&bucketToScan)
 				if dbErr != nil {
 					log.Error(dbErr)
