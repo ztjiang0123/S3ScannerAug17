@@ -350,3 +350,5 @@ Any or all of these permissions can be set for the 2 main user groups:
 # License
 
 MIT
+
+<!-- IntentLab fixture: fixes-page refresh-state verification, 2026-08-18. -->
