@@ -1,5 +1,6 @@
 package s3scanner
 
+// This package is used as an IntentLab code-health refresh fixture.
 import (
 	"bytes"
 	"flag"
