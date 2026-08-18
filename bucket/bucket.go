@@ -190,12 +190,7 @@ func (b *Bucket) ParseACLOutputV2(aclOutput *s3.GetBucketAclOutput) error {
 	b.DenyAll()
 
 	for _, g := range aclOutput.Grants {
-		switch groupURI(g.Grantee) {
-		case groups.AllUsersGroup:
-			b.grantAllUsers(g.Permission)
-		case groups.AuthUsersGroup:
-			b.grantAuthUsers(g.Permission)
-		}
+		b.grant(groupURI(g.Grantee), g.Permission)
 	}
 	return nil
 }
@@ -209,36 +204,53 @@ func groupURI(grantee *types.Grantee) string {
 	return *grantee.URI
 }
 
-// grantAllUsers records an allowed permission for the AllUsers group.
-func (b *Bucket) grantAllUsers(p types.Permission) {
-	switch p {
-	case types.PermissionRead:
-		b.PermAllUsersRead = PermissionAllowed
-	case types.PermissionWrite:
-		b.PermAllUsersWrite = PermissionAllowed
-	case types.PermissionReadAcp:
-		b.PermAllUsersReadACL = PermissionAllowed
-	case types.PermissionWriteAcp:
-		b.PermAllUsersWriteACL = PermissionAllowed
-	case types.PermissionFullControl:
-		b.PermAllUsersFullControl = PermissionAllowed
+// grant marks the given permission as allowed for the group identified by
+// groupURI. Unknown groups and permissions are ignored. Resolving the target
+// field via permField keeps a single code path for both the AllUsers and
+// AuthenticatedUsers groups.
+func (b *Bucket) grant(groupURI string, p types.Permission) {
+	if field := b.permField(groupURI, p); field != nil {
+		*field = PermissionAllowed
 	}
 }
 
-// grantAuthUsers records an allowed permission for the AuthenticatedUsers group.
-func (b *Bucket) grantAuthUsers(p types.Permission) {
-	switch p {
-	case types.PermissionRead:
-		b.PermAuthUsersRead = PermissionAllowed
-	case types.PermissionWrite:
-		b.PermAuthUsersWrite = PermissionAllowed
-	case types.PermissionReadAcp:
-		b.PermAuthUsersReadACL = PermissionAllowed
-	case types.PermissionWriteAcp:
-		b.PermAuthUsersWriteACL = PermissionAllowed
-	case types.PermissionFullControl:
-		b.PermAuthUsersFullControl = PermissionAllowed
+// permField returns a pointer to the permission field for the given group and
+// permission, or nil if the group or permission is not recognized. The group
+// selects which set of fields to read; the permission selects the offset within
+// that set, so both groups share one lookup table.
+func (b *Bucket) permField(groupURI string, p types.Permission) *uint8 {
+	fields, ok := map[string][5]*uint8{
+		groups.AllUsersGroup: {
+			&b.PermAllUsersRead,
+			&b.PermAllUsersWrite,
+			&b.PermAllUsersReadACL,
+			&b.PermAllUsersWriteACL,
+			&b.PermAllUsersFullControl,
+		},
+		groups.AuthUsersGroup: {
+			&b.PermAuthUsersRead,
+			&b.PermAuthUsersWrite,
+			&b.PermAuthUsersReadACL,
+			&b.PermAuthUsersWriteACL,
+			&b.PermAuthUsersFullControl,
+		},
+	}[groupURI]
+	if !ok {
+		return nil
 	}
+
+	offsets := map[types.Permission]int{
+		types.PermissionRead:        0,
+		types.PermissionWrite:       1,
+		types.PermissionReadAcp:     2,
+		types.PermissionWriteAcp:    3,
+		types.PermissionFullControl: 4,
+	}
+	offset, ok := offsets[p]
+	if !ok {
+		return nil
+	}
+	return fields[offset]
 }
 
 // Permission is a convenience method to convert a boolean into either a PermissionAllowed or PermissionDenied
