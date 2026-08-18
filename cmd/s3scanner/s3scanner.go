@@ -230,9 +230,17 @@ func Run(version string) {
 	}
 	defer conn.Close()
 
+	mqConfig := worker.MQConfig{
+		Conn:        conn,
+		Provider:    p,
+		Queue:       mqName,
+		Threads:     args.Threads,
+		DoEnumerate: args.DoEnumerate,
+		WriteToDB:   args.WriteToDB,
+	}
 	for i := 0; i < args.Threads; i++ {
 		wg.Add(1)
-		go worker.WorkMQ(i, &wg, conn, p, mqName, args.Threads, args.DoEnumerate, args.WriteToDB)
+		go worker.WorkMQ(i, &wg, mqConfig)
 	}
 	log.Printf("Waiting for messages. To exit press CTRL+C")
 	wg.Wait()
