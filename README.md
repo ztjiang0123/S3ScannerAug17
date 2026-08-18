@@ -352,3 +352,4 @@ Any or all of these permissions can be set for the 2 main user groups:
 MIT
 
 <!-- IntentLab fixture: fixes-page refresh-state verification, 2026-08-18. -->
+<!-- IntentLab fixture: immediate navigation during refresh. -->
