@@ -1,0 +1,27 @@
+name: Approve review-gate fixture PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number to approve
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Approve fixture pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+        run: >-
+          gh pr review "$PR_NUMBER"
+          --repo "$GITHUB_REPOSITORY"
+          --approve
+          --body "Approval for the IntentLab required-review E2E fixture."
