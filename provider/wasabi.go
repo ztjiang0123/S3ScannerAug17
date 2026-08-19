@@ -102,16 +102,9 @@ func NewProviderWasabi() (*Wasabi, error) {
 }
 
 func (w *Wasabi) newClients() (*clientmap.ClientMap, error) {
-	clients := clientmap.WithCapacity(len(ProviderRegions[w.Name()]))
-	for _, r := range ProviderRegions[w.Name()] {
-		client, err := newNonAWSClient(w, fmt.Sprintf("https://s3.%s.wasabisys.com", r))
-		if err != nil {
-			return nil, err
-		}
-		clients.Set(r, false, client)
-	}
-
-	return clients, nil
+	return newRegionClients(w, func(r string) string {
+		return fmt.Sprintf("https://s3.%s.wasabisys.com", r)
+	})
 }
 
 func (w *Wasabi) Name() string { return "wasabi" }

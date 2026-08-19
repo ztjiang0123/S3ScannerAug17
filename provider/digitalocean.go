@@ -60,16 +60,9 @@ func (pdo DigitalOcean) Enumerate(b *bucket.Bucket) error {
 }
 
 func (pdo *DigitalOcean) newClients() (*clientmap.ClientMap, error) {
-	clients := clientmap.WithCapacity(len(ProviderRegions[pdo.Name()]))
-	for _, r := range ProviderRegions[pdo.Name()] {
-		client, err := newNonAWSClient(pdo, fmt.Sprintf("https://%s.digitaloceanspaces.com", r))
-		if err != nil {
-			return nil, err
-		}
-		clients.Set(r, false, client)
-	}
-
-	return clients, nil
+	return newRegionClients(pdo, func(r string) string {
+		return fmt.Sprintf("https://%s.digitaloceanspaces.com", r)
+	})
 }
 
 func (pdo *DigitalOcean) getRegionClient(region string) *s3.Client {
