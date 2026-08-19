@@ -58,16 +58,9 @@ func (pl *Linode) Enumerate(b *bucket.Bucket) error {
 }
 
 func (pl *Linode) newClients() (*clientmap.ClientMap, error) {
-	clients := clientmap.WithCapacity(len(ProviderRegions[pl.Name()]))
-	for _, r := range ProviderRegions[pl.Name()] {
-		client, err := newNonAWSClient(pl, fmt.Sprintf("https://%s.linodeobjects.com", r))
-		if err != nil {
-			return nil, err
-		}
-		clients.Set(r, false, client)
-	}
-
-	return clients, nil
+	return newRegionClients(pl, func(r string) string {
+		return fmt.Sprintf("https://%s.linodeobjects.com", r)
+	})
 }
 
 func (pl *Linode) Scan(b *bucket.Bucket, doDestructiveChecks bool) error {

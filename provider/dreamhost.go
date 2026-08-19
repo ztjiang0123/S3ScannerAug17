@@ -75,16 +75,9 @@ func (p Dreamhost) Enumerate(b *bucket.Bucket) error {
 }
 
 func (p *Dreamhost) newClients() (*clientmap.ClientMap, error) {
-	clients := clientmap.WithCapacity(len(ProviderRegions[p.Name()]))
-	for _, r := range ProviderRegions[p.Name()] {
-		client, err := newNonAWSClient(p, fmt.Sprintf("https://objects-%s.dream.io", r))
-		if err != nil {
-			return nil, err
-		}
-		clients.Set(r, false, client)
-	}
-
-	return clients, nil
+	return newRegionClients(p, func(r string) string {
+		return fmt.Sprintf("https://objects-%s.dream.io", r)
+	})
 }
 
 func NewProviderDreamhost() (*Dreamhost, error) {

@@ -23,16 +23,9 @@ func NewProviderScaleway() (*Scaleway, error) {
 }
 
 func (sc *Scaleway) newClients() (*clientmap.ClientMap, error) {
-	clients := clientmap.WithCapacity(len(ProviderRegions[sc.Name()]))
-	for _, r := range ProviderRegions[sc.Name()] {
-		client, err := newNonAWSClient(sc, fmt.Sprintf("https://s3.%s.scw.cloud", r))
-		if err != nil {
-			return nil, err
-		}
-		clients.Set(r, false, client)
-	}
-
-	return clients, nil
+	return newRegionClients(sc, func(r string) string {
+		return fmt.Sprintf("https://s3.%s.scw.cloud", r)
+	})
 }
 
 func (sc *Scaleway) Scan(b *bucket.Bucket, doDestructiveChecks bool) error {
