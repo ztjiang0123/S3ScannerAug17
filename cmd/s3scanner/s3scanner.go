@@ -152,40 +152,17 @@ func Run(version string) {
 		log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
 	}
 
-	var p provider.StorageProvider
-	var err error
-	configErr := validateConfig(args)
-	if configErr != nil {
+	if configErr := validateConfig(args); configErr != nil {
 		log.Error(configErr)
 		os.Exit(1)
 	}
-	if args.ProviderFlag == "custom" {
-		if viper.IsSet("providers.custom") {
-			log.Debug("found custom provider")
-			p, err = provider.NewCustomProvider(
-				viper.GetString("providers.custom.address_style"),
-				viper.GetBool("providers.custom.insecure"),
-				viper.GetStringSlice("providers.custom.regions"),
-				viper.GetString("providers.custom.endpoint_format"))
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-		}
-	} else {
-		p, err = provider.NewProvider(args.ProviderFlag)
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
-		}
-	}
+	p := setupProvider(args)
 
 	// Setup database connection
 	if args.WriteToDB {
 		dbConfig := viper.GetString("db.uri")
 		log.Debugf("using database URI from config: %s", dbConfig)
-		dbErr := db.Connect(dbConfig, true)
-		if dbErr != nil {
+		if dbErr := db.Connect(dbConfig, true); dbErr != nil {
 			log.Error(dbErr)
 			os.Exit(1)
 		}
@@ -194,30 +171,7 @@ func Run(version string) {
 	var wg sync.WaitGroup
 
 	if !args.UseMq {
-		buckets := make(chan bucket.Bucket)
-
-		for i := 0; i < args.Threads; i++ {
-			wg.Add(1)
-			go worker.Work(&wg, buckets, p, args.DoEnumerate, args.WriteToDB, args.JSON)
-		}
-
-		if args.BucketFile != "" {
-			err := bucket.ReadFromFile(args.BucketFile, buckets)
-			close(buckets)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-		} else if args.BucketName != "" {
-			if !bucket.IsValidS3BucketName(args.BucketName) {
-				log.Info(fmt.Sprintf("invalid   | %s", args.BucketName))
-				os.Exit(0)
-			}
-			c := bucket.NewBucket(strings.ToLower(args.BucketName))
-			buckets <- c
-			close(buckets)
-		}
-
+		runLocalScan(&wg, p, args)
 		wg.Wait()
 		os.Exit(0)
 	}
@@ -245,4 +199,64 @@ func Run(version string) {
 	}
 	log.Printf("Waiting for messages. To exit press CTRL+C")
 	wg.Wait()
+}
+
+// setupProvider builds the StorageProvider selected by the args, exiting the
+// process on any configuration or construction error.
+func setupProvider(args ArgCollection) provider.StorageProvider {
+	if args.ProviderFlag != "custom" {
+		p, err := provider.NewProvider(args.ProviderFlag)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		return p
+	}
+
+	if !viper.IsSet("providers.custom") {
+		return nil
+	}
+
+	log.Debug("found custom provider")
+	p, err := provider.NewCustomProvider(
+		viper.GetString("providers.custom.address_style"),
+		viper.GetBool("providers.custom.insecure"),
+		viper.GetStringSlice("providers.custom.regions"),
+		viper.GetString("providers.custom.endpoint_format"))
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
+	return p
+}
+
+// runLocalScan spins up the worker pool and feeds it buckets from either the
+// bucket file or the single bucket named on the command line.
+func runLocalScan(wg *sync.WaitGroup, p provider.StorageProvider, args ArgCollection) {
+	buckets := make(chan bucket.Bucket)
+
+	for i := 0; i < args.Threads; i++ {
+		wg.Add(1)
+		go worker.Work(wg, buckets, p, args.DoEnumerate, args.WriteToDB, args.JSON)
+	}
+
+	if args.BucketFile != "" {
+		err := bucket.ReadFromFile(args.BucketFile, buckets)
+		close(buckets)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if args.BucketName != "" {
+		if !bucket.IsValidS3BucketName(args.BucketName) {
+			log.Info(fmt.Sprintf("invalid   | %s", args.BucketName))
+			os.Exit(0)
+		}
+		c := bucket.NewBucket(strings.ToLower(args.BucketName))
+		buckets <- c
+		close(buckets)
+	}
 }
