@@ -28,8 +28,14 @@ func PrintResult(b *bucket.Bucket, json bool) {
 	log.Info(result)
 }
 
-func Work(wg *sync.WaitGroup, buckets chan bucket.Bucket, provider provider.StorageProvider, doEnumerate bool,
-	writeToDB bool, json bool) {
+// Options controls how Work processes each bucket.
+type Options struct {
+	DoEnumerate bool
+	WriteToDB   bool
+	JSON        bool
+}
+
+func Work(wg *sync.WaitGroup, buckets chan bucket.Bucket, provider provider.StorageProvider, opts Options) {
 	defer wg.Done()
 	for b1 := range buckets {
 		b, existsErr := provider.BucketExists(&b1)
@@ -39,7 +45,7 @@ func Work(wg *sync.WaitGroup, buckets chan bucket.Bucket, provider provider.Stor
 		}
 
 		if b.Exists == bucket.BucketNotExist {
-			PrintResult(b, json)
+			PrintResult(b, opts.JSON)
 			continue
 		}
 
@@ -49,7 +55,7 @@ func Work(wg *sync.WaitGroup, buckets chan bucket.Bucket, provider provider.Stor
 			log.WithFields(log.Fields{"bucket": b}).Error(scanErr)
 		}
 
-		if doEnumerate && b.PermAllUsersRead == bucket.PermissionAllowed {
+		if opts.DoEnumerate && b.PermAllUsersRead == bucket.PermissionAllowed {
 			log.WithFields(log.Fields{"method": "main.work()",
 				"bucket_name": b.Name, "region": b.Region}).Debugf("enumerating objects...")
 			enumErr := provider.Enumerate(b)
@@ -58,9 +64,9 @@ func Work(wg *sync.WaitGroup, buckets chan bucket.Bucket, provider provider.Stor
 				continue
 			}
 		}
-		PrintResult(b, json)
+		PrintResult(b, opts.JSON)
 
-		if writeToDB {
+		if opts.WriteToDB {
 			dbErr := db.StoreBucket(b)
 			if dbErr != nil {
 				log.Error(dbErr)
