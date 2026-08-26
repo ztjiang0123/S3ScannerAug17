@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sa7mon/s3scanner/bucket"
@@ -62,16 +61,7 @@ func (p Dreamhost) getRegionClient(region string) *s3.Client {
 }
 
 func (p Dreamhost) Enumerate(b *bucket.Bucket) error {
-	if b.Exists != bucket.BucketExists {
-		return errors.New("bucket might not exist")
-	}
-
-	client := p.getRegionClient(b.Region)
-	enumErr := enumerateListObjectsV2(client, b)
-	if enumErr != nil {
-		return enumErr
-	}
-	return nil
+	return enumerateBucket(p.getRegionClient(b.Region), b)
 }
 
 func (p *Dreamhost) newClients() (*clientmap.ClientMap, error) {
