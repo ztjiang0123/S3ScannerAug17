@@ -26,12 +26,9 @@ func (pdo DigitalOcean) AddressStyle() int {
 }
 
 func (pdo DigitalOcean) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
-	b.Provider = pdo.Name()
-	exists, region, err := bucketExists(pdo.clients, b)
-	if err != nil {
-		return b, err
-	}
-	return applyExistsResult(b, exists, region), nil
+	return resolveBucketExists(b, pdo.Name(), func(b *bucket.Bucket) (bool, string, error) {
+		return bucketExists(pdo.clients, b)
+	})
 }
 
 func (pdo DigitalOcean) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) error {

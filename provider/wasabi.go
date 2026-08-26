@@ -26,12 +26,9 @@ func (w *Wasabi) AddressStyle() int {
 }
 
 func (w *Wasabi) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
-	b.Provider = w.Name()
-	exists, region, err := bucketExists301(w.existsClient, "us-east-1", b)
-	if err != nil {
-		return b, err
-	}
-	return applyExistsResult(b, exists, region), nil
+	return resolveBucketExists(b, w.Name(), func(b *bucket.Bucket) (bool, string, error) {
+		return bucketExists301(w.existsClient, "us-east-1", b)
+	})
 }
 
 func (w *Wasabi) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) error {
