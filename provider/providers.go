@@ -211,6 +211,18 @@ func checkPermissions(client *s3.Client, b *bucket.Bucket, doDestructiveChecks b
 	return nil
 }
 
+// applyExistsResult maps the result of an existence check onto a bucket. It records the region
+// when the bucket exists so callers only need to supply provider-specific existence logic.
+func applyExistsResult(b *bucket.Bucket, exists bool, region string) *bucket.Bucket {
+	if exists {
+		b.Exists = bucket.BucketExists
+		b.Region = region
+	} else {
+		b.Exists = bucket.BucketNotExist
+	}
+	return b
+}
+
 // bucketExists takes a bucket name and checks if it exists in any region contained in clients
 func bucketExists(clients *clientmap.ClientMap, b *bucket.Bucket) (bool, string, error) {
 	results := make(chan bucketCheckResult, clients.Len())

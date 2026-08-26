@@ -36,14 +36,7 @@ func (cp CustomProvider) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) 
 	if err != nil {
 		return b, err
 	}
-	if exists {
-		b.Exists = bucket.BucketExists
-		b.Region = region
-	} else {
-		b.Exists = bucket.BucketNotExist
-	}
-
-	return b, nil
+	return applyExistsResult(b, exists, region), nil
 }
 
 func (cp CustomProvider) Scan(b *bucket.Bucket, doDestructiveChecks bool) error {

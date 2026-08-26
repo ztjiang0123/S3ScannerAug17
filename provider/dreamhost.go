@@ -42,14 +42,7 @@ func (p Dreamhost) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 	if err != nil {
 		return b, err
 	}
-	if exists {
-		b.Exists = bucket.BucketExists
-		b.Region = region
-	} else {
-		b.Exists = bucket.BucketNotExist
-	}
-
-	return b, nil
+	return applyExistsResult(b, exists, region), nil
 }
 
 func (p Dreamhost) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) error {
