@@ -31,17 +31,7 @@ func (pl *Linode) getRegionClient(region string) *s3.Client {
 func (pl *Linode) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 	b.Provider = pl.Name()
 	exists, region, err := bucketExists(pl.clients, b)
-	if err != nil {
-		return b, err
-	}
-	if exists {
-		b.Exists = bucket.BucketExists
-		b.Region = region
-	} else {
-		b.Exists = bucket.BucketNotExist
-	}
-
-	return b, nil
+	return applyExistsResult(b, exists, region, err)
 }
 
 func (pl *Linode) Enumerate(b *bucket.Bucket) error {
