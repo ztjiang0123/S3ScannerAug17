@@ -31,19 +31,9 @@ func (CustomProvider) Name() string {
 }
 
 func (cp CustomProvider) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
-	b.Provider = cp.Name()
-	exists, region, err := bucketExists(cp.clients, b)
-	if err != nil {
-		return b, err
-	}
-	if exists {
-		b.Exists = bucket.BucketExists
-		b.Region = region
-	} else {
-		b.Exists = bucket.BucketNotExist
-	}
-
-	return b, nil
+	return applyExistsResult(b, cp.Name(), func() (bool, string, error) {
+		return bucketExists(cp.clients, b)
+	})
 }
 
 func (cp CustomProvider) Scan(b *bucket.Bucket, doDestructiveChecks bool) error {
