@@ -29,8 +29,102 @@ type MQConfig struct {
 	WriteToDB   bool
 }
 
+// msgOutcome tells WorkMQ's outer loop what to do after handling a single message.
+type msgOutcome int
+
+const (
+	// continueQueue moves on to the next message on the current channel.
+	continueQueue msgOutcome = iota
+	// reconnect breaks out to re-establish the channel (e.g. the server closed it).
+	reconnect
+	// stopWorker exits the worker entirely (used by the one-shot test mode).
+	stopWorker
+)
+
+// storeBucket persists the scanned bucket when database writes are enabled.
+func storeBucket(b *bucket.Bucket, writeToDB bool) {
+	if !writeToDB {
+		return
+	}
+	if dbErr := db.StoreBucket(b); dbErr != nil {
+		log.Error(dbErr)
+	}
+}
+
+// enumerate handles the object-enumeration step for a bucket that exists and was scanned. It returns
+// true when the message has already been fully handled (acked/stored) and the caller should move on.
+func enumerate(p provider.StorageProvider, b *bucket.Bucket, j amqp.Delivery, cfg MQConfig) (handled bool) {
+	if b.PermAllUsersRead != bucket.PermissionAllowed {
+		PrintResult(b, false)
+		FailOnError(j.Ack(false), "failed to ack")
+		storeBucket(b, cfg.WriteToDB)
+		return true
+	}
+
+	log.WithFields(log.Fields{"method": "main.mqwork()",
+		"bucket_name": b.Name, "region": b.Region}).Debugf("enumerating objects...")
+
+	if enumErr := p.Enumerate(b); enumErr != nil {
+		log.Errorf("Error enumerating bucket '%s': %v\nEnumerated objects: %v", b.Name, enumErr, len(b.Objects))
+		FailOnError(j.Reject(false), "failed to reject")
+	}
+	return false
+}
+
+// handleMessage processes a single queue delivery and reports how the outer loop should proceed.
+func handleMessage(p provider.StorageProvider, j amqp.Delivery, cfg MQConfig, once bool) msgOutcome {
+	bucketToScan := bucket.Bucket{}
+	if unmarshalErr := json.Unmarshal(j.Body, &bucketToScan); unmarshalErr != nil {
+		log.Error(unmarshalErr)
+	}
+
+	if !bucket.IsValidS3BucketName(bucketToScan.Name) {
+		log.Info(fmt.Sprintf("invalid   | %s", bucketToScan.Name))
+		FailOnError(j.Ack(false), "failed to ack")
+		return continueQueue
+	}
+
+	b, existsErr := p.BucketExists(&bucketToScan)
+	if existsErr != nil {
+		log.WithFields(log.Fields{"bucket": b.Name, "step": "checkExists"}).Error(existsErr)
+		FailOnError(j.Reject(false), "failed to reject")
+	}
+	if b.Exists == bucket.BucketNotExist {
+		// ack the message and skip to the next
+		log.Infof("not_exist | %s", b.Name)
+		FailOnError(j.Ack(false), "failed to ack")
+		return continueQueue
+	}
+
+	if scanErr := p.Scan(b, false); scanErr != nil {
+		log.WithFields(log.Fields{"bucket": b}).Error(scanErr)
+		FailOnError(j.Reject(false), "failed to reject")
+		return continueQueue
+	}
+
+	if cfg.DoEnumerate {
+		if handled := enumerate(p, b, j, cfg); handled {
+			return continueQueue
+		}
+	}
+
+	PrintResult(&bucketToScan, false)
+	if ackErr := j.Ack(false); ackErr != nil {
+		// Acknowledge mq message. May fail if we've taken too long and the server has closed the channel
+		// If it has, we break and start at the top of the outer for-loop again which re-establishes a new
+		// channel
+		log.WithFields(log.Fields{"bucket": b}).Error(ackErr)
+		return reconnect
+	}
+
+	storeBucket(&bucketToScan, cfg.WriteToDB)
+	if once {
+		return stopWorker
+	}
+	return continueQueue
+}
+
 func WorkMQ(threadID int, wg *sync.WaitGroup, cfg MQConfig) {
-	provider := cfg.Provider
 	queue := cfg.Queue
 	_, once := os.LookupEnv("TEST_MQ") // If we're being tested, exit after one bucket is scanned
 	defer wg.Done()
@@ -48,81 +142,14 @@ func WorkMQ(threadID int, wg *sync.WaitGroup, cfg MQConfig) {
 			return
 		}
 
+	consume:
 		for j := range msgs {
-			bucketToScan := bucket.Bucket{}
-
-			unmarshalErr := json.Unmarshal(j.Body, &bucketToScan)
-			if unmarshalErr != nil {
-				log.Error(unmarshalErr)
-			}
-
-			if !bucket.IsValidS3BucketName(bucketToScan.Name) {
-				log.Info(fmt.Sprintf("invalid   | %s", bucketToScan.Name))
-				FailOnError(j.Ack(false), "failed to ack")
-				continue
-			}
-
-			b, existsErr := provider.BucketExists(&bucketToScan)
-			if existsErr != nil {
-				log.WithFields(log.Fields{"bucket": b.Name, "step": "checkExists"}).Error(existsErr)
-				FailOnError(j.Reject(false), "failed to reject")
-			}
-			if b.Exists == bucket.BucketNotExist {
-				// ack the message and skip to the next
-				log.Infof("not_exist | %s", b.Name)
-				FailOnError(j.Ack(false), "failed to ack")
-				continue
-			}
-
-			scanErr := provider.Scan(b, false)
-			if scanErr != nil {
-				log.WithFields(log.Fields{"bucket": b}).Error(scanErr)
-				FailOnError(j.Reject(false), "failed to reject")
-				continue
-			}
-
-			if cfg.DoEnumerate {
-				if b.PermAllUsersRead != bucket.PermissionAllowed {
-					PrintResult(&bucketToScan, false)
-					FailOnError(j.Ack(false), "failed to ack")
-					if cfg.WriteToDB {
-						dbErr := db.StoreBucket(&bucketToScan)
-						if dbErr != nil {
-							log.Error(dbErr)
-						}
-					}
-					continue
-				}
-
-				log.WithFields(log.Fields{"method": "main.mqwork()",
-					"bucket_name": b.Name, "region": b.Region}).Debugf("enumerating objects...")
-
-				enumErr := provider.Enumerate(b)
-				if enumErr != nil {
-					log.Errorf("Error enumerating bucket '%s': %v\nEnumerated objects: %v", b.Name, enumErr, len(b.Objects))
-					FailOnError(j.Reject(false), "failed to reject")
-				}
-			}
-
-			PrintResult(&bucketToScan, false)
-			ackErr := j.Ack(false)
-			if ackErr != nil {
-				// Acknowledge mq message. May fail if we've taken too long and the server has closed the channel
-				// If it has, we break and start at the top of the outer for-loop again which re-establishes a new
-				// channel
-				log.WithFields(log.Fields{"bucket": b}).Error(ackErr)
-				break
-			}
-
-			// Write to database
-			if cfg.WriteToDB {
-				dbErr := db.StoreBucket(&bucketToScan)
-				if dbErr != nil {
-					log.Error(dbErr)
-				}
-			}
-			if once {
+			switch handleMessage(cfg.Provider, j, cfg, once) {
+			case stopWorker:
 				return
+			case reconnect:
+				break consume
+			case continueQueue:
 			}
 		}
 	}
