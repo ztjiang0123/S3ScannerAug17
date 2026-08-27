@@ -160,6 +160,17 @@ func enumerateListObjectsV2(client *s3.Client, b *bucket.Bucket) error {
 	return nil
 }
 
+/*
+enumerateBucket verifies that b is known to exist and then enumerates its objects using the given client. It captures
+the enumeration flow shared by providers whose Enumerate method only differs by how the region client is resolved.
+*/
+func enumerateBucket(client *s3.Client, b *bucket.Bucket) error {
+	if b.Exists != bucket.BucketExists {
+		return errors.New("bucket might not exist")
+	}
+	return enumerateListObjectsV2(client, b)
+}
+
 func checkPermissions(client *s3.Client, b *bucket.Bucket, doDestructiveChecks bool) error {
 	/*
 		// 1. Check if b exists
