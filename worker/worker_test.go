@@ -23,7 +23,7 @@ func TestWork(t *testing.T) {
 	c := make(chan bucket.Bucket, 1)
 	c <- *b2
 	close(c)
-	Work(&wg, c, aws, true, false, false)
+	Work(&wg, c, Config{Provider: aws, DoEnumerate: true, WriteToDB: false, JSON: false})
 }
 
 func TestLogs(t *testing.T) {

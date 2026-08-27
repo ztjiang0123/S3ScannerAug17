@@ -226,9 +226,16 @@ func runLocal(p provider.StorageProvider) {
 	var wg sync.WaitGroup
 	buckets := make(chan bucket.Bucket)
 
+	workerConfig := worker.Config{
+		Provider:    p,
+		DoEnumerate: args.DoEnumerate,
+		WriteToDB:   args.WriteToDB,
+		JSON:        args.JSON,
+	}
+
 	for i := 0; i < args.Threads; i++ {
 		wg.Add(1)
-		go worker.Work(&wg, buckets, p, args.DoEnumerate, args.WriteToDB, args.JSON)
+		go worker.Work(&wg, buckets, workerConfig)
 	}
 
 	feedBuckets(buckets)
