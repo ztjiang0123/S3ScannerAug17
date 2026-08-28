@@ -342,3 +342,19 @@ func logErr(fields log.Fields, err error) error {
 	log.WithFields(fields).Error(err.Error())
 	return err
 }
+
+// applyBucketExistsResult records the outcome of an existence check on the bucket and returns it. It centralizes the
+// logic shared by every provider's BucketExists method: on error the bucket is returned unchanged, otherwise its
+// Exists (and Region, when found) fields are populated.
+func applyBucketExistsResult(b *bucket.Bucket, exists bool, region string, err error) (*bucket.Bucket, error) {
+	if err != nil {
+		return b, err
+	}
+	if exists {
+		b.Exists = bucket.BucketExists
+		b.Region = region
+	} else {
+		b.Exists = bucket.BucketNotExist
+	}
+	return b, nil
+}
