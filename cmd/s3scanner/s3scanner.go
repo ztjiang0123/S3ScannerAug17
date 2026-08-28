@@ -228,7 +228,12 @@ func runLocal(p provider.StorageProvider) {
 
 	for i := 0; i < args.Threads; i++ {
 		wg.Add(1)
-		go worker.Work(&wg, buckets, p, args.DoEnumerate, args.WriteToDB, args.JSON)
+		go worker.Work(&wg, buckets, worker.Config{
+			Provider:    p,
+			DoEnumerate: args.DoEnumerate,
+			WriteToDB:   args.WriteToDB,
+			JSON:        args.JSON,
+		})
 	}
 
 	feedBuckets(buckets)
