@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -47,15 +46,7 @@ func (w *Wasabi) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) error {
 }
 
 func (w *Wasabi) Enumerate(b *bucket.Bucket) error {
-	if b.Exists != bucket.BucketExists {
-		return errors.New("bucket might not exist")
-	}
-	client := w.getRegionClient(b.Region)
-	enumErr := enumerateListObjectsV2(client, b)
-	if enumErr != nil {
-		return enumErr
-	}
-	return nil
+	return enumerateBucketObjects(w.getRegionClient(b.Region), b)
 }
 
 func (w *Wasabi) getRegionClient(region string) *s3.Client {

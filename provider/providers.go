@@ -117,6 +117,16 @@ func newNonAWSClient(sp StorageProvider, regionURL string) (*s3.Client, error) {
 	return s3.NewFromConfig(cfg, addrStyleOption), nil
 }
 
+// enumerateBucketObjects is the shared Enumerate implementation used by providers whose enumeration only requires
+// confirming the bucket exists and listing its objects with the given region client. It verifies the bucket is known
+// to exist, then delegates to enumerateListObjectsV2.
+func enumerateBucketObjects(client *s3.Client, b *bucket.Bucket) error {
+	if b.Exists != bucket.BucketExists {
+		return errors.New("bucket might not exist")
+	}
+	return enumerateListObjectsV2(client, b)
+}
+
 /*
 enumerateListObjectsV2 will enumerate all objects stored in b using the ListObjectsV2 API endpoint. The endpoint will
 be called until the IsTruncated field is false

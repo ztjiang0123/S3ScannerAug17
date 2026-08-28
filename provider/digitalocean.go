@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -47,16 +46,7 @@ func (pdo DigitalOcean) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) er
 }
 
 func (pdo DigitalOcean) Enumerate(b *bucket.Bucket) error {
-	if b.Exists != bucket.BucketExists {
-		return errors.New("bucket might not exist")
-	}
-
-	client := pdo.getRegionClient(b.Region)
-	enumErr := enumerateListObjectsV2(client, b)
-	if enumErr != nil {
-		return enumErr
-	}
-	return nil
+	return enumerateBucketObjects(pdo.getRegionClient(b.Region), b)
 }
 
 func (pdo *DigitalOcean) newClients() (*clientmap.ClientMap, error) {
