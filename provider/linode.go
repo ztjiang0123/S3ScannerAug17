@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -45,16 +44,7 @@ func (pl *Linode) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 }
 
 func (pl *Linode) Enumerate(b *bucket.Bucket) error {
-	if b.Exists != bucket.BucketExists {
-		return errors.New("bucket might not exist")
-	}
-
-	client := pl.getRegionClient(b.Region)
-	enumErr := enumerateListObjectsV2(client, b)
-	if enumErr != nil {
-		return enumErr
-	}
-	return nil
+	return enumerateBucketObjects(pl.getRegionClient(b.Region), b)
 }
 
 func (pl *Linode) newClients() (*clientmap.ClientMap, error) {

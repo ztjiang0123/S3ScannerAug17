@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"errors"
 	"fmt"
 	"github.com/sa7mon/s3scanner/bucket"
 	"github.com/sa7mon/s3scanner/provider/clientmap"
@@ -69,14 +68,5 @@ func (sc *Scaleway) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 }
 
 func (sc *Scaleway) Enumerate(b *bucket.Bucket) error {
-	if b.Exists != bucket.BucketExists {
-		return errors.New("bucket might not exist")
-	}
-
-	client := sc.clients.Get(b.Region, false)
-	enumErr := enumerateListObjectsV2(client, b)
-	if enumErr != nil {
-		return enumErr
-	}
-	return nil
+	return enumerateBucketObjects(sc.clients.Get(b.Region, false), b)
 }
