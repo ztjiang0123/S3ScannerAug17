@@ -47,17 +47,7 @@ func (*Scaleway) AddressStyle() int {
 func (sc *Scaleway) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 	b.Provider = sc.Name()
 	exists, region, err := bucketExists(sc.clients, b)
-	if err != nil {
-		return b, err
-	}
-	if exists {
-		b.Exists = bucket.BucketExists
-		b.Region = region
-	} else {
-		b.Exists = bucket.BucketNotExist
-	}
-
-	return b, nil
+	return applyBucketExistsResult(b, exists, region, err)
 }
 
 func (sc *Scaleway) Enumerate(b *bucket.Bucket) error {
