@@ -13,14 +13,11 @@ type Linode struct {
 }
 
 func NewProviderLinode() (*Linode, error) {
-	pl := new(Linode)
+	return newNonAWSProvider(new(Linode))
+}
 
-	clients, err := pl.newClients()
-	if err != nil {
-		return pl, err
-	}
+func (pl *Linode) setClients(clients *clientmap.ClientMap) {
 	pl.clients = clients
-	return pl, nil
 }
 
 func (pl *Linode) getRegionClient(region string) *s3.Client {
