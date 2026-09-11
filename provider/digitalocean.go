@@ -55,17 +55,14 @@ func (pdo *DigitalOcean) newClients() (*clientmap.ClientMap, error) {
 	})
 }
 
+func (pdo *DigitalOcean) setClients(clients *clientmap.ClientMap) {
+	pdo.clients = clients
+}
+
 func (pdo *DigitalOcean) getRegionClient(region string) *s3.Client {
 	return pdo.clients.Get(region, false)
 }
 
 func NewDigitalOcean() (*DigitalOcean, error) {
-	pdo := new(DigitalOcean)
-
-	clients, err := pdo.newClients()
-	if err != nil {
-		return pdo, err
-	}
-	pdo.clients = clients
-	return pdo, nil
+	return newNonAWSProvider(new(DigitalOcean))
 }

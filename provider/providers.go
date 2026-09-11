@@ -83,6 +83,26 @@ func NewProvider(name string) (StorageProvider, error) {
 	return provider, err
 }
 
+// clientMapProvider is implemented by non-AWS providers that build their region
+// clients through newClients and store the result on a clients field. It lets
+// newNonAWSProvider share the identical constructor wiring across providers.
+type clientMapProvider interface {
+	newClients() (*clientmap.ClientMap, error)
+	setClients(*clientmap.ClientMap)
+}
+
+// newNonAWSProvider allocates a provider, builds its region clients, and stores
+// them on the provider. It centralizes the constructor logic shared by every
+// non-AWS provider so each provider only needs to declare its endpoint mapping.
+func newNonAWSProvider[T clientMapProvider](p T) (T, error) {
+	clients, err := p.newClients()
+	if err != nil {
+		return p, err
+	}
+	p.setClients(clients)
+	return p, nil
+}
+
 // newClientMap builds a ClientMap containing one non-AWS S3 client per region
 // configured for the provider. regionURL maps a region name to its endpoint URL.
 func newClientMap(sp StorageProvider, regionURL func(region string) string) (*clientmap.ClientMap, error) {

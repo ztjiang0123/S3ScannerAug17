@@ -70,13 +70,10 @@ func (p *Dreamhost) newClients() (*clientmap.ClientMap, error) {
 	})
 }
 
-func NewProviderDreamhost() (*Dreamhost, error) {
-	pd := new(Dreamhost)
+func (p *Dreamhost) setClients(clients *clientmap.ClientMap) {
+	p.clients = clients
+}
 
-	clients, err := pd.newClients()
-	if err != nil {
-		return pd, err
-	}
-	pd.clients = clients
-	return pd, nil
+func NewProviderDreamhost() (*Dreamhost, error) {
+	return newNonAWSProvider(new(Dreamhost))
 }
