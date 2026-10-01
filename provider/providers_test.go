@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sa7mon/s3scanner/bucket"
 	"github.com/stretchr/testify/assert"
 )
@@ -232,6 +234,44 @@ func Test_StorageProvider_Scan(t *testing.T) {
 			assert.Nil(t2, scanErr)
 			assert.Equal(t2, bucket.BucketExists, gb.Exists)
 			assert.Equal(t2, tt.permissions, tt.bucket.String())
+		})
+	}
+}
+
+func Test_NewRegionalProvider_ClientPerRegion(t *testing.T) {
+	t.Parallel()
+
+	type regionalClient interface {
+		StorageProvider
+		getRegionClient(string) *s3.Client
+	}
+	tests := []struct {
+		name        string
+		newProvider func() (regionalClient, error)
+		endpoint    string
+	}{
+		{name: "digitalocean", newProvider: func() (regionalClient, error) { return NewDigitalOcean() },
+			endpoint: "https://%s.digitaloceanspaces.com"},
+		{name: "dreamhost", newProvider: func() (regionalClient, error) { return NewProviderDreamhost() },
+			endpoint: "https://objects-%s.dream.io"},
+		{name: "linode", newProvider: func() (regionalClient, error) { return NewProviderLinode() },
+			endpoint: "https://%s.linodeobjects.com"},
+		{name: "scaleway", newProvider: func() (regionalClient, error) { return NewProviderScaleway() },
+			endpoint: "https://s3.%s.scw.cloud"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t2 *testing.T) {
+			t2.Parallel()
+			p, err := tt.newProvider()
+			assert.NoError(t2, err)
+			assert.Equal(t2, tt.name, p.Name())
+			for _, region := range ProviderRegions[tt.name] {
+				client := p.getRegionClient(region)
+				if assert.NotNil(t2, client, region) {
+					assert.Equal(t2, fmt.Sprintf(tt.endpoint, region), *client.Options().BaseEndpoint)
+					assert.Equal(t2, p.AddressStyle() == PathStyle, client.Options().UsePathStyle)
+				}
+			}
 		})
 	}
 }
