@@ -83,6 +83,39 @@ func NewProvider(name string) (StorageProvider, error) {
 	return provider, err
 }
 
+// regionClients holds one S3 client per region for providers whose regions are listed in ProviderRegions.
+type regionClients struct {
+	clients *clientmap.ClientMap
+}
+
+func (rc regionClients) getRegionClient(region string) *s3.Client {
+	return rc.clients.Get(region, false)
+}
+
+func (rc *regionClients) setClients(clients *clientmap.ClientMap) {
+	rc.clients = clients
+}
+
+// regionalProvider is a StorageProvider backed by regionClients.
+type regionalProvider interface {
+	StorageProvider
+	setClients(*clientmap.ClientMap)
+}
+
+// newRegionalProvider populates p with a client for each of its configured regions. endpointFormat is a fmt format
+// string whose single %s verb is replaced by the region name to build that region's endpoint URL. On error, p is
+// returned without clients.
+func newRegionalProvider[P regionalProvider](p P, endpointFormat string) (P, error) {
+	clients, err := newClientMap(p, func(r string) string {
+		return fmt.Sprintf(endpointFormat, r)
+	})
+	if err != nil {
+		return p, err
+	}
+	p.setClients(clients)
+	return p, nil
+}
+
 // newClientMap builds a ClientMap containing one non-AWS S3 client per region
 // configured for the provider. regionURL maps a region name to its endpoint URL.
 func newClientMap(sp StorageProvider, regionURL func(region string) string) (*clientmap.ClientMap, error) {

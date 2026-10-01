@@ -1,10 +1,7 @@
 package provider
 
 import (
-	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sa7mon/s3scanner/bucket"
-	"github.com/sa7mon/s3scanner/provider/clientmap"
 	"strings"
 )
 
@@ -12,7 +9,7 @@ import (
 var forbiddenBuckets = []string{"auth"}
 
 type Dreamhost struct {
-	clients *clientmap.ClientMap
+	regionClients
 }
 
 func (p Dreamhost) Insecure() bool {
@@ -56,27 +53,10 @@ func (p Dreamhost) Scan(bucket *bucket.Bucket, doDestructiveChecks bool) error {
 	return checkPermissions(client, bucket, doDestructiveChecks)
 }
 
-func (p Dreamhost) getRegionClient(region string) *s3.Client {
-	return p.clients.Get(region, false)
-}
-
 func (p Dreamhost) Enumerate(b *bucket.Bucket) error {
 	return enumerateBucketObjects(p.getRegionClient(b.Region), b)
 }
 
-func (p *Dreamhost) newClients() (*clientmap.ClientMap, error) {
-	return newClientMap(p, func(r string) string {
-		return fmt.Sprintf("https://objects-%s.dream.io", r)
-	})
-}
-
 func NewProviderDreamhost() (*Dreamhost, error) {
-	pd := new(Dreamhost)
-
-	clients, err := pd.newClients()
-	if err != nil {
-		return pd, err
-	}
-	pd.clients = clients
-	return pd, nil
+	return newRegionalProvider(new(Dreamhost), "https://objects-%s.dream.io")
 }

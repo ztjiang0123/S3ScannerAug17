@@ -1,34 +1,19 @@
 package provider
 
 import (
-	"fmt"
 	"github.com/sa7mon/s3scanner/bucket"
-	"github.com/sa7mon/s3scanner/provider/clientmap"
 )
 
 type Scaleway struct {
-	clients *clientmap.ClientMap
+	regionClients
 }
 
 func NewProviderScaleway() (*Scaleway, error) {
-	sc := new(Scaleway)
-
-	clients, err := sc.newClients()
-	if err != nil {
-		return sc, err
-	}
-	sc.clients = clients
-	return sc, nil
-}
-
-func (sc *Scaleway) newClients() (*clientmap.ClientMap, error) {
-	return newClientMap(sc, func(r string) string {
-		return fmt.Sprintf("https://s3.%s.scw.cloud", r)
-	})
+	return newRegionalProvider(new(Scaleway), "https://s3.%s.scw.cloud")
 }
 
 func (sc *Scaleway) Scan(b *bucket.Bucket, doDestructiveChecks bool) error {
-	client := sc.clients.Get(b.Region, false)
+	client := sc.getRegionClient(b.Region)
 	return checkPermissions(client, b, doDestructiveChecks)
 }
 
@@ -61,5 +46,5 @@ func (sc *Scaleway) BucketExists(b *bucket.Bucket) (*bucket.Bucket, error) {
 }
 
 func (sc *Scaleway) Enumerate(b *bucket.Bucket) error {
-	return enumerateBucketObjects(sc.clients.Get(b.Region, false), b)
+	return enumerateBucketObjects(sc.getRegionClient(b.Region), b)
 }
